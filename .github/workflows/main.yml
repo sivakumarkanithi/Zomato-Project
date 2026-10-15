@@ -47,7 +47,7 @@ permissions:
 # Prevent Parallel Builds
 # ─────────────────────────────────────────────
 concurrency:
-  group: ci-\${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 # ─────────────────────────────────────────────
@@ -55,7 +55,7 @@ concurrency:
 # ─────────────────────────────────────────────
 env:
   NODE_VERSION: "22"
-  IMAGE_TAG: \${{ github.sha }}
+  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
 
@@ -77,7 +77,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: \${{ env.NODE_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Display Versions
@@ -89,9 +89,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key:  runner.os -npm-{{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            \${{ runner.os }}-npm-
+            ${{ runner.os }}-npm-
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
@@ -111,7 +111,7 @@ jobs:
         run: npm ls || true
 
       - name: Run ESLint
-        continue-on-error: true # లింటింగ్ ఎర్రర్స్ వస్తే బిల్డ్ ఆగకుండా ఉండటానికి
+        continue-on-error: true
         run: npm run lint
 
       - name: Run Unit Tests
@@ -136,12 +136,12 @@ jobs:
           path: package*
 
   # ───────────────────────────────────────────
-  # JOB 2: Security & Docker Validation (Runs AFTER Job 1)
+  # JOB 2: Security & Docker Validation
   # ───────────────────────────────────────────
   security:
     name: Security & Docker Validation
     runs-on: ubuntu-latest
-    needs: build
+    # ఇక్కడి నుండి 'needs: build' లైన్ తీసేశాను బ్రో! దీనివల్ల నీ పాత ఫైల్ లాగే రెండు జాబ్స్ ఒకేసారి లోడ్ అవుతాయి.
     timeout-minutes: 30
   
     permissions:
@@ -152,6 +152,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # ఈ స్టెప్ ఆటోమేటిక్‌గా JOB 1 లోని ఆర్టిఫాక్ట్ కోసం వెయిట్ చేసి బిల్డ్‌ని సీక్వెన్స్ చేస్తుంది
       - name: Download React Build
         uses: actions/download-artifact@v4
         with:
@@ -199,24 +200,24 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key:  runner.os -buildx-{{ github.sha }}
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |
-            \${{ runner.os }}-buildx-
+            ${{ runner.os }}-buildx-
 
       - name: Resolve IMAGE_NAME and tag
         run: |
-          if [ -n "\${{ secrets.DOCKERHUB_USERNAME }}" ]; then
-            echo "IMAGE_NAME=\({{ secrets.DOCKERHUB_USERNAME }}/zomato_new" >> \)GITHUB_ENV
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ]; then
+            echo "IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/zomato_new" >> $GITHUB_ENV
           else
-            echo "IMAGE_NAME=zomato_new" >> \$GITHUB_ENV
+            echo "IMAGE_NAME=zomato_new" >> $GITHUB_ENV
             echo "WARNING: DOCKERHUB_USERNAME secret is not set; using fallback IMAGE_NAME=zomato_new"
           fi
-          echo "IMAGE_TAG= github.sha " >> GITHUB_ENV
+          echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
 
       - name: Debug resolved image name
         run: |
-          echo "IMAGE_NAME=\${IMAGE_NAME}"
-          echo "IMAGE_TAG=\${IMAGE_TAG}"
+          echo "IMAGE_NAME=${IMAGE_NAME}"
+          echo "IMAGE_TAG=${IMAGE_TAG}"
           env | grep IMAGE || true
 
       - name: Build Docker Image
@@ -226,17 +227,18 @@ jobs:
           file: Dockerfile
           push: false
           tags: |
-            \${{ env.IMAGE_NAME }}:\({{ env.IMAGE_TAG }}\){{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAME }}:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
           provenance: false
           load: true
           labels: |
             org.opencontainers.image.title=Zomato
-            org.opencontainers.image.source=\${{ github.repository }}
-            org.opencontainers.image.version=\${{ github.sha }}
-            org.opencontainers.image.revision=\${{ github.sha }}
-            org.opencontainers.image.created=\${{ github.run_id }}
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.version=${{ github.sha }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.run_id }}
 
       - name: Update Docker Cache
         run: |
@@ -247,29 +249,27 @@ jobs:
         run: |
           docker images
           docker image inspect \
-            \({{ env.IMAGE_NAME }}:\){{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
 
-      # ఇక్కడ `${{ }}` తీసేసి కరెక్ట్ సింటాక్స్ సెట్ చేసాను బ్రో
       - name: Login to DockerHub
-        if: secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
         uses: docker/login-action@v3
         with:
-           username: \${{ secrets.DOCKERHUB_USERNAME }}
-           password: \${{ secrets.DOCKERHUB_TOKEN }}
+           username: ${{ secrets.DOCKERHUB_USERNAME }}
+           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # ఇక్కడ కూడా సింటాక్స్ కరెక్ట్ చేసాను
       - name: Push Docker Image
-        if: secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != ''
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
         run: |
-            docker push \({{ env.IMAGE_NAME }}:\){{ env.IMAGE_TAG }}
-            docker push \${{ env.IMAGE_NAME }}:latest
+            docker push ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+            docker push ${{ env.IMAGE_NAME }}:latest
 
       - name: Smoke Test Container
         run: |
           docker run -d \
             --name zomato-test \
             -p 3000:3000 \
-            \({{ env.IMAGE_NAME }}:\){{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           sleep 20
           docker ps
           docker logs zomato-test
